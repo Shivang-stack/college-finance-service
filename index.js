@@ -7,6 +7,7 @@ const PubSub = require('./app/pubsub');
 const TransactionPool = require('./wallet/transaction-pool');
 const Wallet = require('./wallet');
 const TransactionMiner = require('./app/transaction-miner');
+const { promisify } = require('util');
 
 const isDevelopment = process.env.ENV === 'development';
 
@@ -20,11 +21,216 @@ const blockchain = new Blockchain();
 const transactionPool = new TransactionPool();
 const wallet = new Wallet();
 const pubsub = new PubSub({ blockchain, transactionPool, redisUrl: REDIS_URL });
-// const pubsub = new PubSub({ blockchain, transactionPool, wallet }); // for PubNub
 const transactionMiner = new TransactionMiner({ blockchain, transactionPool, wallet, pubsub });
 
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, 'client/dist')));
+
+const redis = require('redis');
+const client = redis.createClient(REDIS_URL);
+
+app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.json());
+
+// Create a new user with auto-incremental id
+app.post('/api/register', (req, res) => {
+  const user = req.body;
+
+  client.incr('users:id', (err, id) => {
+    if (err) {
+      console.error(err);
+      res.status(500).send(err);
+    } else {
+      user.id = id;
+
+      client.hmset(`users:${id}`, user, (err, result) => {
+        if (err) {
+          console.error(err);
+          res.status(500).send(err);
+        } else {
+          return res.status(201).json({ message: 'User registered successfully!' });
+        }
+      });
+    }
+  });
+});
+
+app.post('/api/login', (req, res) => {
+  const { email, password } = req.body;
+
+  client.keys('users:*', (err, keys) => {
+    if (err) {
+      console.error(err);
+      res.status(500).send(err);
+    } else {
+      let userFound = false;
+
+      keys.forEach(key => {
+        client.hgetall(key, (err, user) => {
+          if (err) {
+            console.error(err);
+          } else if (user && user.email === email && user.password === password) {
+            // User found with matching email and password
+            userFound = true;
+            res.send(`User with id ${user.id} logged in successfully`);
+          }
+        });
+      });
+
+      // No user found with matching email and password
+      setTimeout(() => {
+        if (!userFound) {
+          res.status(401).send('Invalid email or password');
+        }
+      }, 1000);
+    }
+  });
+});
+
+// Get all users
+app.get('/api/users', (req, res) => {
+  client.keys('users:*', (err, keys) => {
+    if (err) {
+      console.error(err);
+      res.status(500).send(err);
+    } else {
+      client.mget(keys, (err, users) => {
+        if (err) {
+          console.error(err);
+          res.status(500).send(err);
+        } else {
+          const result = users.map(user => JSON.parse(user));
+          res.send(result);
+        }
+      });
+    }
+  });
+});
+
+// Get user by id
+app.get('/api/users/:id', (req, res) => {
+  const id = req.params.id;
+
+  client.hgetall(`users:${id}`, (err, user) => {
+    if (err) {
+      console.error(err);
+      res.status(500).send(err);
+    } else if (!user) {
+      res.status(404).send(`User with id ${id} not found`);
+    } else {
+      res.send(user);
+    }
+  });
+});
+
+// Delete all users
+app.delete('/api/users', (req, res) => {
+  client.keys('users:*', (err, keys) => {
+    if (err) {
+      console.error(err);
+      res.status(500).send(err);
+    } else if (keys.length === 0) {
+      res.status(404).send('No users found');
+    } else {
+        client.del(keys, (err, result) => {
+          if (err) {
+            console.error(err);
+            res.status(500).send(err);
+          } else {
+            res.send(`Deleted ${result} users`);
+          }
+      });
+    }
+  });
+});
+  
+  // Delete user by id
+app.delete('/api/users/:id', (req, res) => {
+  const id = req.params.id;
+    client.del(`users:${id}`, (err, result) => {
+      if (err) {
+        console.error(err);
+        res.status(500).send(err);
+      } else if (result === 0) {
+        res.status(404).send(`User with id ${id} not found`);
+      } else {
+        res.send(`Deleted user with id ${id}`);
+      }
+    });
+});
+
+// Promisify Redis methods
+const hgetallAsync = promisify(client.hgetall).bind(client);
+const hmsetAsync = promisify(client.hmset).bind(client);
+const hincrbyAsync = promisify(client.hincrby).bind(client);
+const hdelAsync = promisify(client.hdel).bind(client);
+
+// API to create a new application
+app.post('/api/applications', async (req, res) => {
+  const { name, phone, email, type, reason, requiredDocument } = req.body;
+
+  const id = await hincrbyAsync('applications', 'id', 1);
+
+  const application = { id, name, phone, email, type, reason, requiredDocument };
+  await hmsetAsync(`application:${id}`, application);
+
+  res.status(201).json({ message: 'Application created successfully' });
+});
+
+// API to retrieve all applications
+app.get('/api/applications', async (req, res) => {
+  const keys = await hgetallAsync('applications');
+
+  const applications = [];
+  for (const key in keys) {
+    if (key !== 'id') {
+      const application = await hgetallAsync(`application:${keys[key]}`);
+      applications.push(application);
+    }
+  }
+
+  res.status(200).json(applications);
+});
+
+// API to retrieve a single application
+app.get('/api/applications/:id', async (req, res) => {
+  const application = await hgetallAsync(`application:${req.params.id}`);
+
+  if (!application) {
+    res.status(404).json({ message: 'Application not found' });
+  } else {
+    res.status(200).json(application);
+  }
+});
+
+// API to update a application
+app.put('/api/applications/:id', async (req, res) => {
+  const { name, type, reason, requiredDocument } = req.body;
+
+  const application = await hgetallAsync(`application:${req.params.id}`);
+
+  if (!application) {
+    res.status(404).json({ message: 'Application not found' });
+  } else {
+    const updatedApplication = { ...application, name, type, reason, requiredDocument };
+    await hmsetAsync(`application:${req.params.id}`, updatedApplication);
+
+    res.status(200).json({ message: 'Application updated successfully' });
+  }
+});
+
+// API to delete a application
+app.delete('/api/applications/:id', async (req, res) => {
+  const application = await hgetallAsync(`application:${req.params.id}`);
+
+  if (!application) {
+    res.status(404).json({ message: 'Application not found' });
+  } else {
+    await hdelAsync('applications', `application:${req.params.id}`);
+
+    res.status(200).json({ message: 'Application deleted successfully' });
+  }
+});
 
 app.get('/api/blocks', (req, res) => {
   res.json(blockchain.chain);
