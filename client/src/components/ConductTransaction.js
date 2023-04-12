@@ -1,10 +1,22 @@
 import React, { Component } from 'react';
-import { FormGroup, FormControl, Button } from 'react-bootstrap';
+import {
+  FormGroup,
+  FormControl,
+  Button,
+  DropdownButton,
+  MenuItem,
+} from 'react-bootstrap';
 import { Link } from 'react-router-dom';
 import history from '../history';
 
 class ConductTransaction extends Component {
   state = { recipient: '', amount: 0, knownAddresses: [] };
+
+  updateRecipient = (eventKey) => {
+    this.setState({
+      recipient: eventKey,
+    });
+  };
 
   componentDidMount() {
     fetch(`${document.location.origin}/api/known-addresses`)
@@ -12,9 +24,9 @@ class ConductTransaction extends Component {
       .then(json => this.setState({ knownAddresses: json }));
   }
 
-  updateRecipient = event => {
-    this.setState({ recipient: event.target.value });
-  }
+  // updateRecipient = event => {
+  //   this.setState({ recipient: event.target.value });
+  // }
 
   updateAmount = event => {
     this.setState({ amount: Number(event.target.value) });
@@ -53,14 +65,24 @@ class ConductTransaction extends Component {
           })
         }
         <br />
-        <FormGroup>
+        {/* <FormGroup>
           <FormControl
             input='text'
             placeholder='recipient'
             value={this.state.recipient}
             onChange={this.updateRecipient}
           />
-        </FormGroup>
+        </FormGroup> */}
+        <FormGroup>
+            <DropdownButton
+              title='Select Recevier'
+              id='userType-dropdown'
+              onSelect={this.handleRoleChange}
+            >
+              <MenuItem eventKey='stationary'>Stationary</MenuItem>
+              <MenuItem eventKey='shopkeeper'>Shopkeeper</MenuItem>
+            </DropdownButton>
+          </FormGroup>
         <FormGroup>
           <FormControl
             input='number'

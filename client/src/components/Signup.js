@@ -67,7 +67,6 @@ class Signup extends Component {
     const data = await response.json();
   
     console.log(data); // log the response to the console
-    console.log(response.ok)
     if (response.ok) {
       this.setState({ message: data.message });
       this.props.history.push('/home');

@@ -35,14 +35,17 @@ app.use(bodyParser.json());
 // Create a new user with auto-incremental id
 app.post('/api/register', (req, res) => {
   const user = req.body;
-
+  const wallet = new Wallet();
+  wallet.balance=0
   client.incr('users:id', (err, id) => {
     if (err) {
       console.error(err);
       res.status(500).send(err);
     } else {
       user.id = id;
-
+      user.publicKey =wallet.publicKey
+      user.balance =wallet.balance
+      user.keyPair =wallet.keyPair
       client.hmset(`users:${id}`, user, (err, result) => {
         if (err) {
           console.error(err);
@@ -61,29 +64,38 @@ app.post('/api/login', (req, res) => {
   client.keys('users:*', (err, keys) => {
     if (err) {
       console.error(err);
-      res.status(500).send(err);
-    } else {
-      let userFound = false;
-
-      keys.forEach(key => {
-        client.hgetall(key, (err, user) => {
-          if (err) {
-            console.error(err);
-          } else if (user && user.email === email && user.password === password) {
-            // User found with matching email and password
-            userFound = true;
-            res.send(`User with id ${user.id} logged in successfully`);
-          }
-        });
-      });
-
-      // No user found with matching email and password
-      setTimeout(() => {
-        if (!userFound) {
-          res.status(401).send('Invalid email or password');
-        }
-      }, 1000);
+      return res.status(500).send('Internal server error');
     }
+
+    let userFound = false;
+    let userKey;
+
+    keys.forEach(key => {
+      client.type(key, (err, type) => {
+        if (err) {
+          console.error(err);
+        } else if (type === 'hash') {
+          client.hgetall(key, (err, user) => {
+            if (err) {
+              console.error(err);
+            } else if (user && user.email === email && user.password === password) {
+              // User found with matching email and password
+              userFound = true;
+              userKey = user.id;
+            }
+          });
+        }
+      });
+    });
+
+    // No user found with matching email and password
+    setTimeout(() => {
+      if (userFound) {
+        res.send(userKey);
+      } else {
+        res.status(401).send('Invalid email or password');
+      }
+    }, 1000);
   });
 });
 
@@ -167,11 +179,11 @@ const hdelAsync = promisify(client.hdel).bind(client);
 
 // API to create a new application
 app.post('/api/applications', async (req, res) => {
-  const { name, phone, email, type, reason, requiredDocument } = req.body;
+  const { name, phone, email, applicationType, reason, status, user_id } = req.body;
 
   const id = await hincrbyAsync('applications', 'id', 1);
 
-  const application = { id, name, phone, email, type, reason, requiredDocument };
+  const application = { id, name, phone, email, applicationType, reason, status,user_id };
   await hmsetAsync(`application:${id}`, application);
 
   res.status(201).json({ message: 'Application created successfully' });
@@ -205,14 +217,29 @@ app.get('/api/applications/:id', async (req, res) => {
 
 // API to update a application
 app.put('/api/applications/:id', async (req, res) => {
-  const { name, type, reason, requiredDocument } = req.body;
+  const { name, applicationType, reason } = req.body;
 
   const application = await hgetallAsync(`application:${req.params.id}`);
 
   if (!application) {
     res.status(404).json({ message: 'Application not found' });
   } else {
-    const updatedApplication = { ...application, name, type, reason, requiredDocument };
+    const updatedApplication = { ...application, name, applicationType, reason };
+    await hmsetAsync(`application:${req.params.id}`, updatedApplication);
+
+    res.status(200).json({ message: 'Application updated successfully' });
+  }
+});
+
+app.put('/api/admin/applications/:id', async (req, res) => {
+  const { name, applicationType, reason, status } = req.body;
+
+  const application = await hgetallAsync(`application:${req.params.id}`);
+
+  if (!application) {
+    res.status(404).json({ message: 'Application not found' });
+  } else {
+    const updatedApplication = { ...application, name, applicationType, reason, status };
     await hmsetAsync(`application:${req.params.id}`, updatedApplication);
 
     res.status(200).json({ message: 'Application updated successfully' });
@@ -302,13 +329,24 @@ app.get('/api/mine-transactions', (req, res) => {
   res.redirect('/api/blocks');
 });
 
-app.get('/api/wallet-info', (req, res) => {
-  const address = wallet.publicKey;
-
-  res.json({
-    address,
-    balance: Wallet.calculateBalance({ chain: blockchain.chain, address })
+app.get('/api/wallet-info/:id', (req, res) => {
+  const id = req.params.id;
+  client.hgetall(`users:${id}`, (err, user) => {
+    if (err) {
+      console.error(err);
+      res.status(500).send(err);
+    } else if (!user) {
+      res.status(404).send(`User with id ${id} not found`);
+    } else {
+      const address = user.publicKey
+      res.json({
+        address: address,
+        balance: Wallet.calculateBalance({ chain: blockchain.chain, address })
+      });
+    }
   });
+
+  
 });
 
 app.get('/api/known-addresses', (req, res) => {

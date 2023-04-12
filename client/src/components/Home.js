@@ -6,14 +6,14 @@ class Home extends Component {
   state = { walletInfo: {} };
 
   componentDidMount() {
-    fetch(`${document.location.origin}/api/wallet-info`)
+    const id=localStorage.getItem('id')
+    fetch(`${document.location.origin}/api/wallet-info/${id}`)
       .then(response => response.json())
       .then(json => this.setState({ walletInfo: json }));
   }
 
   render() {
     const { address, balance } = this.state.walletInfo;
-
     return (
       <div className='App'>
         <div className='container'>

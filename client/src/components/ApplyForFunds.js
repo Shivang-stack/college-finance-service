@@ -16,8 +16,10 @@ class ApplyForFunds extends Component {
       email:'',
       phone:'',
       applicationType: '',
-      subject: '',
-      files: []
+      reason: '',
+      status: 'PENDING',
+      user_id: localStorage.getItem('id'),
+      // files: []
     };
   }
 
@@ -26,9 +28,9 @@ class ApplyForFunds extends Component {
     this.setState({ [name]: value });
   }
 
-  handleFileChange = (event) => {
-    this.setState({ files: event.target.files });
-  }
+  // handleFileChange = (event) => {
+  //   this.setState({ files: event.target.files });
+  // }
 
   handleApplicationTypeChange = (eventKey) => {
     this.setState({
@@ -38,19 +40,20 @@ class ApplyForFunds extends Component {
 
   handleSubmit = (event) => {
     event.preventDefault();
-    const { name, email, phone, applicationType, subject, files } = this.state;
-    const formData = new FormData();
-    formData.append('name', name);
-    formData.append('email', email);
-    formData.append('phone', phone);
-    formData.append('type', applicationType);
-    formData.append('reason', subject);
-    for (let i = 0; i < files.length; i++) {
-      formData.append('requiredDocument', files[i]);
+    const { name, email, phone, applicationType, reason, status ,user_id } = this.state;
+   
+    const applicationData = {
+      name, 
+      email, 
+      phone, 
+      applicationType, 
+      reason, 
+      status,
+      user_id
     }
     fetch('/api/application', {
       method: 'POST',
-      body: formData
+      body: JSON.stringify(applicationData)
     }).then(response => {
       if (response.ok) {
         alert('Application submitted successfully');
@@ -111,16 +114,16 @@ class ApplyForFunds extends Component {
           </FormGroup>
           <FormGroup>
             <FormControl
-              name='subject'
+              name='reason'
               input='text'
               placeholder='Enter Subject/Reason'
-              value={this.state.subject}
+              value={this.state.reason}
               onChange={this.handleInputChange}
             />
           </FormGroup>
           <FormGroup>
             <h3>Upload Required documents</h3>
-            <input type="file" multiple onChange={this.handleFileChange} />
+            {/* <input type="file" multiple onChange={this.handleFileChange} /> */}
           </FormGroup>
           <button type="submit" className='btn'>Submit</button>
           <Link to='/home'><div className='btn'>Back</div></Link>

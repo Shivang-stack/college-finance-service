@@ -40,14 +40,15 @@ class Login extends Component {
         password: this.state.password
       })
     })
-      .then(res => res.json())
+      .then(res => res.text())
       .then(data => {
-        if (data.success) {
+        if (data) {
+          localStorage.setItem('id', data);
           // redirect to home page if login is successful
           this.props.history.push('/home');
         } else {
           // display error message if login fails
-          this.setState({ error: data.message });
+          this.setState({ error: 'Invalid email or password' });
         }
       })
       .catch(error => {
@@ -87,7 +88,7 @@ class Login extends Component {
                 onChange={this.handleInputChange}
               />
             </FormGroup>
-            <Link to='/home'><Button type='submit'>Submit</Button></Link>
+            <Button type='submit'>Submit</Button>
             <Link to='/'><Button>Back</Button></Link>
             {error && <div className='error'>{error}</div>}
           </form>

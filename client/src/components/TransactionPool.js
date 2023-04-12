@@ -61,7 +61,7 @@ class TransactionPool extends Component {
           bsStyle="danger"
           onClick={this.fetchMineTransactions}
         >
-          Mine the Transactions
+          Fetch Transactions
         </Button>
       </div>
       </div>
