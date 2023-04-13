@@ -40,27 +40,34 @@ class ApplyForFunds extends Component {
 
   handleSubmit = (event) => {
     event.preventDefault();
-    const { name, email, phone, applicationType, reason, status ,user_id } = this.state;
-   
+    const { name, email, phone, applicationType, reason, status, user_id } = this.state;
+    
     const applicationData = {
-      name, 
-      email, 
-      phone, 
-      applicationType, 
-      reason, 
+      name,
+      email,
+      phone,
+      applicationType,
+      reason,
       status,
       user_id
     }
-    fetch('/api/application', {
+  
+    fetch('/api/applications', {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
       body: JSON.stringify(applicationData)
-    }).then(response => {
+    })
+    .then(response => {
       if (response.ok) {
         alert('Application submitted successfully');
       } else {
+        console.log(response)
         alert('Error submitting application');
       }
-    }).catch(error => {
+    })
+    .catch(error => {
       console.error(error);
       alert('Error submitting application');
     });
